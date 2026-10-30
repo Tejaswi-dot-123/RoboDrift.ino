@@ -1,0 +1,224 @@
+// en: Install "WebSockets" by Markus Sattler via Arduino IDE Library Manager. Arduino.h, WiFi.h and WiFiClient.h come pre-installed, no setup needed.
+// tr: Arduino IDE Kütüphane Yöneticisi'nden Markus Sattler'ın "WebSockets" kütüphanesini kurun. Arduino.h, WiFi.h ve WiFiClient.h önceden yüklü gelir, kurulum gerekmez.
+// es: Instale "WebSockets" de Markus Sattler desde el Gestor de Librerías de Arduino IDE. Arduino.h, WiFi.h y WiFiClient.h vienen preinstaladas, no requieren configuración.
+// pt-PT: Instale "WebSockets" de Markus Sattler pelo Gestor de Bibliotecas do Arduino IDE. Arduino.h, WiFi.h e WiFiClient.h vêm pré-instaladas, não requerem configuração.
+// pt-BR: Instale "WebSockets" de Markus Sattler pelo Gerenciador de Bibliotecas do Arduino IDE. Arduino.h, WiFi.h e WiFiClient.h vêm pré-instaladas, não requerem configuração.
+#include <Arduino.h>
+#include <ESP8266WiFi.h>
+#include <WiFiClient.h>
+#include <WebSocketsServer.h>
+
+// en: Enter your WiFi network name (SSID) and password in the fields below.
+// tr: Aşağıdaki alanlara WiFi ağ adınızı (SSID) ve şifrenizi giriniz.
+// es: Introduzca el nombre de su red WiFi (SSID) y la contraseña en los campos a continuación.
+// pt-PT: Introduza o nome da sua rede WiFi (SSID) e a palavra-passe nos campos abaixo.
+// pt-BR: Digite o nome da sua rede WiFi (SSID) e a senha nos campos abaixo.
+const char* ssid = "Jyothish";
+const char* password = "josh1804";
+
+unsigned long lastCommandTime = 0;
+const unsigned long TIMEOUT = 500;
+bool isStopped = false;
+
+// en: WebSocket port is set to 81. The same port must be entered in the app. If you change it, update the app as well.
+// tr: WebSocket portu 81 olarak ayarlanmıştır. Aynı port uygulamaya da girilmelidir. Değiştirirseniz uygulamayı da güncelleyin.
+// es: El puerto WebSocket está configurado en 81. El mismo puerto debe introducirse en la app. Si lo cambia, actualícelo también en la app.
+// pt-PT: A porta WebSocket está definida como 81. A mesma porta deve ser introduzida na app. Se a alterar, atualize também na app.
+// pt-BR: A porta WebSocket está definida como 81. A mesma porta deve ser inserida no app. Se alterá-la, atualize também no app.
+WebSocketsServer webSocket = WebSocketsServer(81);
+
+// en: Channel A = RIGHT motor (ENA_RIGHT, IN1_RIGHT, IN2_RIGHT) | Channel B = LEFT motor (ENB_LEFT, IN3_LEFT, IN4_LEFT). If motors spin in wrong direction, swap IN1/IN2 or IN3/IN4 connections.
+// tr: Kanal A = SAĞ motor (ENA_RIGHT, IN1_RIGHT, IN2_RIGHT) | Kanal B = SOL motor (ENB_LEFT, IN3_LEFT, IN4_LEFT). Motorlar ters yönde dönüyorsa IN1/IN2 veya IN3/IN4 bağlantılarını yer değiştirin.
+// es: Canal A = Motor DERECHO (ENA_RIGHT, IN1_RIGHT, IN2_RIGHT) | Canal B = Motor IZQUIERDO (ENB_LEFT, IN3_LEFT, IN4_LEFT). Si los motores giran en dirección incorrecta, intercambie las conexiones IN1/IN2 o IN3/IN4.
+// pt-PT: Canal A = Motor DIREITO (ENA_RIGHT, IN1_RIGHT, IN2_RIGHT) | Canal B = Motor ESQUERDO (ENB_LEFT, IN3_LEFT, IN4_LEFT). Se os motores girarem na direção errada, troque as ligações IN1/IN2 ou IN3/IN4.
+// pt-BR: Canal A = Motor DIREITO (ENA_RIGHT, IN1_RIGHT, IN2_RIGHT) | Canal B = Motor ESQUERDO (ENB_LEFT, IN3_LEFT, IN4_LEFT). Se os motores girarem na direção errada, troque as conexões IN1/IN2 ou IN3/IN4.
+#define ENA_RIGHT   D5
+#define IN1_RIGHT   D1
+#define IN2_RIGHT   D2
+#define ENB_LEFT    D6
+#define IN3_LEFT    D7
+#define IN4_LEFT    D0
+
+// en: General purpose digital output pins. Assign functions as needed for your design.
+// tr: Genel amaçlı dijital çıkış pinleri. Tasarımınıza uygun işlev atayabilirsiniz.
+// es: Pines de salida digital de propósito general. Asigne funciones según su diseño.
+// pt-PT: Pinos de saída digital de uso geral. Atribua funções conforme o seu design.
+// pt-BR: Pinos de saída digital de uso geral. Atribua funções conforme o seu design.
+
+
+int currentSpeed = 100;
+
+const int speedTable[11] = {0, 25, 51, 76, 102, 127, 153, 178, 204, 229, 255};
+
+
+
+// en: IMPORTANT: This code uses ESP32 board package v3.x.x. In v3.x.x, ledcWrite uses PIN number, not channel number. If you use v2.x.x, replace ledcWrite(PIN, speed) with ledcWrite(CHANNEL, speed).
+// tr: ÖNEMLİ: Bu kod ESP32 board paketi v3.x.x için yazılmıştır. v3.x.x'te ledcWrite kanal numarası değil PIN numarası kullanır. v2.x.x kullanıyorsanız ledcWrite(PIN, hız) yerine ledcWrite(KANAL, hız) kullanın.
+// es: IMPORTANTE: Este código usa el paquete ESP32 v3.x.x. En v3.x.x, ledcWrite usa el número de PIN, no el canal. Si usa v2.x.x, reemplace ledcWrite(PIN, velocidad) por ledcWrite(CANAL, velocidad).
+// pt-PT: IMPORTANTE: Este código usa o pacote ESP32 v3.x.x. Na v3.x.x, ledcWrite usa o número do PIN, não o canal. Se usar v2.x.x, substitua ledcWrite(PIN, velocidade) por ledcWrite(CANAL, velocidade).
+// pt-BR: IMPORTANTE: Este código usa o pacote ESP32 v3.x.x. Na v3.x.x, ledcWrite usa o número do PIN, não o canal. Se usar v2.x.x, substitua ledcWrite(PIN, velocidade) por ledcWrite(CANAL, velocidade).
+void setMotor(bool rightFwd, bool rightBack, int rightSpeed,
+              bool leftFwd, bool leftBack, int leftSpeed) {
+     rightspeed = constrain(rightspeed, 0, 255);
+     leftspeed = constrain(leftspeed , 0, 255);
+
+    digitalWrite(IN1_RIGHT, rightFwd);
+    digitalWrite(IN2_RIGHT, rightBack);
+    ledcWrite(ENA_RIGHT, rightSpeed);
+    digitalWrite(IN3_LEFT, leftFwd);
+    digitalWrite(IN4_LEFT, leftBack);
+    ledcWrite(ENB_LEFT, leftSpeed);
+}
+
+void stopMotors() {
+    setMotor(false, false, 0, false, false, 0);
+    isStopped = true;
+}
+
+void moveForward()       { setMotor(true, false, currentSpeed, true, false, currentSpeed); }
+void moveBackward()      { setMotor(false, true, currentSpeed, false, true, currentSpeed); }
+void turnLeft()          { setMotor(true, false, currentSpeed, false, true, currentSpeed); }
+void turnRight()         { setMotor(false, true, currentSpeed, true, false, currentSpeed); }
+void moveForwardRight()  { setMotor(true, false, currentSpeed, true, false, currentSpeed / 2); }
+void moveForwardLeft()   { setMotor(true, false, currentSpeed / 2, true, false, currentSpeed); }
+void moveBackwardRight() { setMotor(false, true, currentSpeed, false, true, currentSpeed / 2); }
+void moveBackwardLeft()  { setMotor(false, true, currentSpeed / 2, false, true, currentSpeed); }
+
+void handleCommand(String cmd) {
+    lastCommandTime = millis();
+    isStopped = false;
+
+    Serial.println("CMD: " + cmd);
+
+    if (cmd == "F")           moveForward();
+    else if (cmd == "B")      moveBackward();
+    else if (cmd == "L")      turnLeft();
+    else if (cmd == "R")      turnRight();
+    else if (cmd == "S")      stopMotors();
+    else if (cmd == "E")      moveForwardRight();
+    else if (cmd == "Q")      moveForwardLeft();
+    else if (cmd == "C")      moveBackwardRight();
+    else if (cmd == "Z")      moveBackwardLeft();
+    else if (cmd.startsWith("V") && cmd.length() == 2) {
+        char level = cmd.charAt(1);
+        if (level >= '0' && level <= '9')
+            currentSpeed = speedTable[level - '0'];
+        else if (level == 'A')
+            currentSpeed = speedTable[10];
+    }
+    // en: F1, F2, F3 are general purpose digital outputs (HIGH=3.3V, LOW=0V). Assign functions as needed for your design.
+    // tr: F1, F2, F3 genel amaçlı dijital çıkışlardır (HIGH=3.3V, LOW=0V). Tasarımınıza uygun işlev atayabilirsiniz.
+    // es: F1, F2, F3 son salidas digitales de propósito general (HIGH=3.3V, LOW=0V). Asigne funciones según su diseño.
+    // pt-PT: F1, F2, F3 são saídas digitais de uso geral (HIGH=3.3V, LOW=0V). Atribua funções conforme o seu design.
+    // pt-BR: F1, F2, F3 são saídas digitais de uso geral (HIGH=3.3V, LOW=0V). Atribua funções conforme o seu design.
+    
+void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
+    switch (type) {
+        case WStype_DISCONNECTED:
+            Serial.printf("[%u] Disconnected!\n", num);
+            // en: Stop the car immediately when WebSocket connection is lost.
+            // tr: WebSocket bağlantısı koptuğunda aracı hemen durdur.
+            // es: Detener el coche inmediatamente cuando se pierde la conexión WebSocket.
+            // pt-PT: Parar o carro imediatamente quando a ligação WebSocket é perdida.
+            // pt-BR: Parar o carro imediatamente quando a conexão WebSocket é perdida.
+            stopMotors();
+            break;
+
+        case WStype_CONNECTED: {
+            IPAddress ip = webSocket.remoteIP(num);
+            Serial.printf("[%u] Connected from %s\n", num, ip.toString().c_str());
+            webSocket.sendTXT(num, "ESP8266 Connected!");
+            break;
+        }
+
+        case WStype_TEXT: {
+            String cmd ;
+            cmd.reserve(length);
+
+            for(size_t i = 0; i < length; i++) {
+                cmd += (char)payload[i];
+            }
+            cmd.trim();
+            if (cmd == "ping") {
+                webSocket.sendTXT(num, "pong");
+                lastCommandTime = millis();
+                return;
+            }
+            handleCommand(cmd);
+            break;
+        }
+
+        default:
+            break;
+    }
+}
+
+void setup() {
+    Serial.begin(115200);
+
+    pinMode(ENA_RIGHT, OUTPUT);
+    pinMode(IN1_RIGHT, OUTPUT);
+    pinMode(IN2_RIGHT, OUTPUT);
+    pinMode(ENB_LEFT, OUTPUT);
+    pinMode(IN3_LEFT, OUTPUT);
+    pinMode(IN4_LEFT, OUTPUT);
+    
+    analogWriteRange(255)
+    analogWriteFreq(1000)
+
+    // en: Configure PWM channels for ESP32
+    // tr: ESP32 için PWM kanallarını yapılandır
+    // es: Configurar canales PWM para ESP32
+    // pt-PT: Configurar canais PWM para ESP32
+    // pt-BR: Configurar canais PWM para ESP32
+    
+
+    stopMotors();
+
+    // en: lastCommandTime is initialized here to prevent the timeout from triggering immediately at startup.
+    // tr: lastCommandTime burada başlatılır, böylece başlangıçta zaman aşımı tetiklenmez.
+    // es: lastCommandTime se inicializa aquí para evitar que el timeout se active inmediatamente al inicio.
+    // pt-PT: lastCommandTime é inicializado aqui para evitar que o timeout seja ativado imediatamente no arranque.
+    // pt-BR: lastCommandTime é inicializado aqui para evitar que o timeout seja ativado imediatamente na inicialização.
+    lastCommandTime = millis();
+
+    WiFi.begin(ssid, password);
+    Serial.print("Connecting to WiFi");
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+    Serial.println();
+    Serial.print("Connected! IP: ");
+    Serial.println(WiFi.localIP());
+
+    webSocket.begin();
+    webSocket.onEvent(webSocketEvent);
+    Serial.println("WebSocket server started on port 81");
+}
+
+void loop() {
+    if (WiFi.status() != WL_CONNECTED) {
+        // en: Stop the car and attempt to reconnect when WiFi is lost.
+        // tr: WiFi bağlantısı koptuğunda aracı durdur ve yeniden bağlanmayı dene.
+        // es: Detener el coche e intentar reconectar cuando se pierde el WiFi.
+        // pt-PT: Parar o carro e tentar reconectar quando o WiFi é perdido.
+        // pt-BR: Parar o carro e tentar reconectar quando o WiFi é perdido.
+        stopMotors();
+        Serial.println("WiFi lost, reconnecting...");
+        WiFi.reconnect();
+        delay(1000);
+        return;
+    }
+
+    webSocket.loop();
+
+    // en: If no command is received for 500ms, stop the car automatically.
+    // tr: 500ms boyunca komut gelmezse aracı otomatik olarak durdur.
+    // es: Si no se recibe ningún comando en 500ms, detener el coche automáticamente.
+    // pt-PT: Se não for recebido nenhum comando em 500ms, parar o carro automaticamente.
+    // pt-BR: Se nenhum comando for recebido em 500ms, parar o carro automaticamente.
+    if (millis() - lastCommandTime > TIMEOUT && !isStopped) {
+        stopMotors();
+    }
+}
